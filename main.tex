@@ -1,0 +1,200 @@
+\documentclass[bibliography=numbered]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper, total={6in, 8in}]{geometry}
+\usepackage{graphicx}
+\usepackage{parskip}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{hyperref}
+\usepackage{multirow}
+\usepackage{mathtools}
+\usepackage[section]{placeins}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=white,      
+    urlcolor=blue,
+    }
+
+\usepackage{caption}
+\usepackage{subcaption}
+
+\urlstyle{same}
+
+\usepackage[
+backend=biber,
+style=alphabetic,
+sorting=ynt
+]{biblatex}
+
+\addbibresource{references.bib}
+
+\title{Looping and Leverage in Decentralised Finance (DeFi)}
+
+\author{Michael A. Bentley}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Whilst lending protocols in decentralised finance (DeFi) require borrowers to remain over-collateralised at all times, this does not prevent traders from using them to build leveraged long and short positions. The amount of leverage they can acquire depends crucially on the loan-to-value (LTV) parameter $v \in [0, 1]$ between their collateral asset (that they are long on) and their liability (debt) asset (that they are short on). 
+
+One way to build a leveraged position is through so-called `looping'. For example, suppose the LTV between ETH and USDC is $v = 0.8$, and a trader wishes to go long ETH using $\$1000$ worth of initial ETH collateral. Then they could do the following:
+
+\begin{itemize}
+    \item Deposit $\$1000$ ETH collateral
+    \item Borrow $\$1000 \times 0.8 = \$800$ USDC
+    \item Swap $\$800$ USDC for $\$800$ ETH
+    \item Deposit $\$800$ ETH collateral
+    \item Borrow $\$800 \times 0.8 = \$640$ USDC
+    \item Swap $\$640$ USDC for $\$640$ ETH
+    \item Deposit $\$640$ ETH collateral
+\end{itemize}
+
+At the end of two loops, they have $\$1000 + \$800 + \$640 = \$2440$ ETH collateral deposits, and $\$800 + \$640 = \$1440$ USDC debt. Their net asset value (NAV) in the protocol is the difference between the value of their total collateral and total debt, i.e. $\$2440 - \$1440 = \$1000$. 
+
+Their leverage is the ratio of their total collateral value to their NAV, which is $\$2440 / \$1000 = 2.44x$. This definition is also sometimes called the `asset to equity' ratio or `equity multiplier' (see \href{https://corporatefinanceinstitute.com/resources/valuation/equity-multiplier/}{here} for further explanation). Note that by looping in this way, the trader has gained 2.44x more exposure to the price of ETH than they had originally from their initial ETH collateral. This factor will amplify their profit/loss as the ETH price rises/falls relative to USDC. 
+
+Building a leveraged position in this way is possible because collateral is continually topped up with every round of looping. In this case the trader has a loan-to-value of $\$1440 / \$2440 \approx 0.59$, well under the required LTV of $v = 0.8$ for ETH/USDC, in spite of accruing more debt than their initial collateral deposit would support. 
+
+Whilst manual looping is one way to build a leveraged position, it is inefficient to do onchain because it requires multiple deposit/borrow/swap transactions. Furthermore, it is not clear from the outset how much of a leveraged position a user can build this way. 
+
+A more efficient way to build a leveraged position can be achieved onchain thanks to the atomicity of transactions. Instead of depositing, borrowing, and swapping multiple times, a user can instead calculate how much debt would be required for a given amount of leverage and then borrow, swap, and redeposit this amount of debt as collateral in a single atomic batch transaction.
+
+To take this approach, however, a user first needs to know the maximum leverage they can build given the LTV parameters associated with the assets they want to use as collateral and go long/short on. Thankfully, there is a mathematical short-cut we can use to solve for the maximum leverage a user could achieve if they were able to do infinitely many looping transactions to achieve the maximum leverage possible. 
+
+\section{Calculating maximum leverage}
+
+Let $c$ be the value of a borrower's initial margin collateral, which is also equal to their NAV. We will also denote the NAV by $A$. Whilst we simply have $A = c$ in this section, we will generalise the concept in the next section to scenarios in which a user has more than one margin collateral. 
+
+Now consider what happens when the borrower deposits the $c$ initial collateral, borrows liability asset worth $cv$, swaps this back into an amount $cv$ of the collateral asset, re-deposits the collateral, and repeats this process, infinitely many times. Their total maximum collateral value, $C$, after infinite rounds of looping, is given by 
+
+\begin{equation}
+    C
+    =
+    c
+    +
+    cv
+    +
+    cv^2
+    +
+    \cdots
+    +.
+\end{equation}
+
+This is a typical infinite geometric series. It has a well-known solution, which is given by 
+
+\begin{equation}
+    C 
+    =
+    c \cdot \frac{1}{1 - v}
+    =
+    A \cdot \frac{1}{1 - v}.
+\end{equation}
+
+We know that a user's leverage is the total value of their collateral divided by their NAV. The maximum leverage available, $L$, is therefore the maximum value of their collateral, $C$, divided by their NAV, $A$, which simplifies to
+
+\begin{equation}
+    L
+    =
+    \frac{C}{A}
+    =
+    \frac{1}{1 - v}.
+\end{equation}
+
+On every round of looping the debt grows by an amount equal to the collateral deposited multiplied by the LTV parameter $v$. The total maximum value of their debt, $D$, after this process is just the total value of their maximum collateral value minus their NAV, i.e. $D = C - A$. 
+
+\section{Multiple different margin collaterals}
+
+In most cases, the margin collateral used to finance a leveraged position will be in the same currency as the asset the user is going long on (i.e. the one they swap into after borrowing). However, this is not a strict requirement. A user could also deposit a different asset as collateral to long/short two other assets. They could even deposit multiple different types of collateral to carry out this trade. 
+
+Suppose a user has a basked of different collateral assets $i = 1, 2, ..., n$, and they want to go long asset $l$ and short asset $s$. Let $v$ denote the LTV parameter between the long asset and the short asset as before, but now let $v_{i}$ denote the LTV parameter the LTV parameter between marginal collateral asset $i$ and the short asset. Similarly, let $c$ denote the initial deposit of the long asset (which could be zero) and $c_i$ be the initial deposit of each of the $i$ margin collaterals. The NAV of a user is now defined as
+
+\begin{equation}
+    A 
+    = 
+    c + \sum_{i = 1}^{n} c_i.
+\end{equation}
+
+The total collateral value under infinite looping can now be calculated using two separate infinite sums as follows:
+
+\begin{align}
+    C
+    &=
+    \left( c
+    +
+    cv
+    +
+    cv^2
+    +
+    \cdots
+    +
+    \right)
+    +
+    \sum_{i=1}^{n}
+    \left(
+    c_i
+    +
+    c_i v_i
+    +
+    c_i v_i v
+    +
+    c_i v_i v^2
+    +
+    \cdots
+    +
+    \right) \\ \nonumber
+    &=
+    \sum_{i=1}^{n} c_i
+    +
+    \left( 
+    c
+    +
+    \sum_{i=1}^{n} c_i v_i 
+    \right)
+    \cdot
+    \frac{1}{1 - v} \\ \nonumber
+    &=
+    c
+    +
+    \sum_{i=1}^{n} c_i
+    +
+    \left( 
+    c
+    +
+    \sum_{i=1}^{n} c_i v_i 
+    \right)
+    \cdot
+    \frac{1}{1 - v}
+    -
+    c \\ \nonumber
+    &=
+    A
+    +
+    \left( 
+    cv
+    +
+    \sum_{i=1}^{n} c_i v_i 
+    \right)
+    \cdot
+    \frac{1}{1 - v}
+\end{align}
+
+The maximum leverage available then becomes
+
+\begin{equation}
+    L
+    =
+    \frac{C}{A}
+    =
+    1 + \frac{cv
+    +
+    \sum_{i=1}^{n} c_i v_i}{c + \sum_{i=1}^{n} c_i}
+    \cdot
+    \frac{1}{1 - v}.
+\end{equation}
+
+\end{document}
